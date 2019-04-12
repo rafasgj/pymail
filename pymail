@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+
+"""A mass email daemon suitable to use with Gmail."""
+
+import argparse
+import daemon
+import csv
+import json
+import smtplib
+import traceback
+from collections import namedtuple
+
+
+def process_arguments():
+    """Process command line arguments."""
+    description = "A mass email daemon suitable to use with Gmail."
+    parser = argparse.ArgumentParser(description=description)
+    parser.add_argument('--dump', action='store_true', default=False,
+                        help="""Dumps example files 'emails.ex', 'message.ex',
+                                and 'config.ex', and exit.""")
+    group = parser.add_argument_group()
+    group.add_argument('emails', type=argparse.FileType('rt'), nargs='?',
+                       help='The file with the email list.')
+    group.add_argument('message', type=argparse.FileType('rt'), nargs='?',
+                       help='The file with the email text template.')
+    parser.add_argument('-v', '--version', action="version", version='0.1a')
+    parser.add_argument('-C', '--configuration', type=argparse.FileType('rt'),
+                        help="""Define a configuration file. By default try to
+                             load the file '.config'.""")
+
+    group = parser.add_argument_group("Message",
+                                      "Message options.")
+    group.add_argument('--subject', help="The message subject.")
+
+    group = parser.add_argument_group("Daemon",
+                                      "Options for running as a daemon.")
+
+    group.add_argument('-d', '--daemon', action="store_true", default=False,
+                       help="Run as a deamon.")
+    group.add_argument('-c', '--count', metavar='NUM', default=0,
+                       help="The number of messages to send on each batch.")
+    group.add_argument('-t', '--time', metavar='MINS', default=3, type=int,
+                       help="The number of minutes between each batch run.")
+
+    args = parser.parse_args()
+
+    if not (args.dump or (args.emails and args.message)):
+        parser.print_help()
+        print("\nA list of emails and a message file is required, or --dump.")
+    else:
+        return args
+
+
+Contact = namedtuple('Contact', 'email name')
+configuration_template = """{
+    "sender": "No Sender <nosender@example.com>",
+    "subject": "This is an automatic message",
+    "username": "A Gmail User Name",
+    "password": "The username plain text password."
+}"""
+
+
+def dump():
+    """Dump example configuration files."""
+    emails = "Some User, some_user_email@example.com"
+    message = """Anything could be a message.\nAny message would do.\n"""
+    with open('emails.ex', 'wt') as f:
+        f.write(emails)
+    with open('message.ex', 'wt') as f:
+        f.write(message)
+    with open('config.ex', 'wt') as f:
+        f.write(configuration_template)
+
+
+def read_email_list_file(options):
+    """Read the email list and return a list of email/name pairs."""
+    with options.emails as csvfile:
+        return [Contact(email=row[1].strip(), name=row[0].strip())
+                for row in csv.reader(csvfile)]
+
+
+def load_configuration():
+    """Load configuration from a file or use default configuration."""
+    configuration = json.loads(configuration_template)
+    try:
+        if options.configuration:
+            data = "".join(options.configuration.readlines())
+        else:
+            with open('.config', 'rt') as f:
+                data = "".join(f.readlines())
+        configuration = json.loads(data)
+    except Exception as e:
+        m = "Could not load any configuration file. Using defaults."
+        print(m)
+    return configuration
+
+
+def main(options):
+    """Program entry point, after CLI arguments have been processed."""
+    configuration = load_configuration()
+    email_list = read_email_list_file(options)
+    configuration['subject'] = options.subject if options.subject else ""
+    configuration['body'] = "\n".join(options.message.readlines())
+    template = """From: {sender}
+To: "{contact.name}" <{contact.email}>
+Subject: {subject}
+
+{body}"""
+    try:
+        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        server.ehlo()
+        server.login(configuration['username'], configuration['password'])
+        for contact in email_list:
+            msg = template.format(contact=contact, **configuration)
+            server.sendmail(configuration['sender'], [contact.email], msg)
+        server.quit()
+    except Exception:
+        print(traceback.format_exc())
+    else:
+        print("Message sent.")
+
+
+if __name__ == "__main__":
+    options = process_arguments()
+    if options:
+        if options.dump:
+            dump()
+        else:
+            if options.daemon:
+                with daemon.DaemonContext():
+                    main(options)
+            else:
+                main(options)
