@@ -1,22 +1,7 @@
-# local management
-/issues/
-
-# Output files.
-*.pdf
-
-# LaTeX temporary files.
-*.aux
-*.dvi
-*.out
-*.log
-*.nav
-*.snm
-*.toc
-*.vrb
-*.gz
-*.xdv
-*.fls
-*.fdb_latexmk
+.config
+*.ex
+*.csv
+message.txt
 
 # temparary files
 *.swp
