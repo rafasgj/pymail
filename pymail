@@ -11,7 +11,7 @@ import traceback
 from collections import namedtuple
 
 
-def process_arguments():
+def process_arguments(params=None):
     """Process command line arguments."""
     description = "A mass email daemon suitable to use with Gmail."
     parser = argparse.ArgumentParser(description=description)
@@ -42,7 +42,7 @@ def process_arguments():
     group.add_argument('-t', '--time', metavar='MINS', default=3, type=int,
                        help="The number of minutes between each batch run.")
 
-    args = parser.parse_args()
+    args = parser.parse_args(params)
 
     if not (args.dump or (args.emails and args.message)):
         parser.print_help()
