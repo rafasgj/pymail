@@ -107,7 +107,10 @@ Subject: {subject}
 
 {body}"""
     try:
-        server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+        smtp_server = configuration['server']
+        smtp_port = int(configuration['port'])
+        print("Connecting to {}:{}".format(smtp_server, smtp_port))
+        server = smtplib.SMTP_SSL(smtp_server, smtp_port)
         server.ehlo()
         server.login(configuration['username'], configuration['password'])
         for contact in email_list:
