@@ -8,6 +8,7 @@ import csv
 import json
 import smtplib
 import traceback
+import time
 from collections import namedtuple
 
 
@@ -52,12 +53,19 @@ def process_arguments(params=None):
 
 
 Contact = namedtuple('Contact', 'email name')
-configuration_template = """{
-    "sender": "No Sender <nosender@example.com>",
-    "subject": "This is an automatic message",
+__msg = "From: {sender}\\n" + \
+    'To: {recipient}>\\n' + \
+    'Subject: {subject}\\n\\n{body}'
+configuration_template = """{{
+    "server": "smtp.example.com",
+    "port": 465,
+    "magic_number": 20,
+    "sleep": 60,
+    "sender": "No One <noone@example.com",
     "username": "A Gmail User Name",
-    "password": "The username plain text password."
-}"""
+    "password": "The username plain text password.",
+    "template": "{}"
+}}""".format(__msg)
 
 
 def dump():
@@ -88,11 +96,23 @@ def load_configuration():
         else:
             with open('.config', 'rt') as f:
                 data = "".join(f.readlines())
-        configuration = json.loads(data)
+        configuration.update(json.loads(data))
     except Exception as e:
         m = "Could not load any configuration file. Using defaults."
         print(m)
     return configuration
+
+
+def connect_to_server(configuration):
+    """Connect to the configured SMTP server."""
+    smtp_server = configuration['server']
+    smtp_port = int(configuration.get('port', 465))
+    print("Connecting to {}:{}".format(smtp_server, smtp_port))
+    server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+    server.ehlo()
+    print("Authenticating user: {}".format(configuration['username']))
+    server.login(configuration['username'], configuration['password'])
+    return server
 
 
 def main(options):
@@ -101,26 +121,29 @@ def main(options):
     email_list = read_email_list_file(options)
     configuration['subject'] = options.subject if options.subject else ""
     configuration['body'] = "\n".join(options.message.readlines())
-    template = """From: {sender}
-To: "{contact.name}" <{contact.email}>
-Subject: {subject}
-
-{body}"""
-    try:
-        smtp_server = configuration['server']
-        smtp_port = int(configuration['port'])
-        print("Connecting to {}:{}".format(smtp_server, smtp_port))
-        server = smtplib.SMTP_SSL(smtp_server, smtp_port)
-        server.ehlo()
-        server.login(configuration['username'], configuration['password'])
-        for contact in email_list:
-            msg = template.format(contact=contact, **configuration)
-            server.sendmail(configuration['sender'], [contact.email], msg)
-        server.quit()
-    except Exception:
-        print(traceback.format_exc())
-    else:
-        print("Message sent.")
+    magic = configuration.get('magic_number', 20)
+    for index in range(0, len(email_list), magic):
+        try:
+            server = connect_to_server(configuration)
+            addrs = [c for c in email_list[index:index + magic]]
+            addrs = ["{} <{}>".format(c.email, c.name) for c in addrs]
+            configuration['recipient'] = ",".join(addrs)
+            message = configuration.get('template', __msg)
+            payload = message.format(**configuration)
+            server.sendmail(configuration['sender'], addrs, payload)
+            server.quit()
+        except Exception:
+            print(traceback.format_exc())
+            break
+        else:
+            left = len(email_list) - index
+            count = magic if left > magic else left
+            left -= count
+            print("{} messages sent. {} messages left.".format(count, left))
+            if left > 0:
+                sleep = int(configuration.get('sleep', 0))
+                print("Sleeping {} seconds".format(sleep))
+                time.sleep(sleep)
 
 
 if __name__ == "__main__":
