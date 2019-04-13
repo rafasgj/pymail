@@ -18,18 +18,19 @@ def process_arguments(params=None):
     """Process command line arguments."""
     description = "A mass email daemon suitable to use with Gmail."
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument('--dump', action='store_true', default=False,
-                        help="""Dumps example files 'emails.ex', 'message.ex',
-                                and 'config.ex', and exit.""")
-    group = parser.add_argument_group()
-    group.add_argument('emails', type=argparse.FileType('rt'), nargs='?',
-                       help='The file with the email list.')
-    group.add_argument('message', type=argparse.FileType('rt'), nargs='?',
-                       help='The file with the email text template.')
     parser.add_argument('-v', '--version', action="version", version='0.1a')
-    parser.add_argument('-C', '--configuration', type=argparse.FileType('rt'),
-                        help="""Define a configuration file. By default try to
-                             load the file '.config'.""")
+    parser.add_argument('emails', type=argparse.FileType('rt'), nargs='?',
+                        help='The file with the email list.')
+    parser.add_argument('message', type=argparse.FileType('rt'), nargs='?',
+                        help='The file with the email text template.')
+    group = parser.add_argument_group("Configuration",
+                                      "Configuration options.")
+    group.add_argument('--dump', action='store_true', default=False,
+                       help="""Dumps example files 'emails.ex', 'message.ex',
+                               and 'config.ex', and exit.""")
+    group.add_argument('-C', '--configuration', type=argparse.FileType('rt'),
+                       help="""Define a configuration file. By default try to
+                               load the file '.config'.""")
 
     group = parser.add_argument_group("Message",
                                       "Message options.")
