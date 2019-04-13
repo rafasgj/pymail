@@ -9,6 +9,8 @@ import json
 import smtplib
 import traceback
 import time
+import logging
+import logging.handlers
 from collections import namedtuple
 
 
@@ -99,7 +101,7 @@ def load_configuration():
         configuration.update(json.loads(data))
     except Exception as e:
         m = "Could not load any configuration file. Using defaults."
-        print(m)
+        logging.warn(m)
     return configuration
 
 
@@ -107,12 +109,26 @@ def connect_to_server(configuration):
     """Connect to the configured SMTP server."""
     smtp_server = configuration['server']
     smtp_port = int(configuration.get('port', 465))
-    print("Connecting to {}:{}".format(smtp_server, smtp_port))
+    logging.info("Connecting to {}:{}".format(smtp_server, smtp_port))
     server = smtplib.SMTP_SSL(smtp_server, smtp_port)
     server.ehlo()
-    print("Authenticating user: {}".format(configuration['username']))
+    logging.info("Authenticating user: {}".format(configuration['username']))
     server.login(configuration['username'], configuration['password'])
     return server
+
+
+def report_sent_mail(configuration, index, list_size):
+    """Report messages sent in the last batch."""
+    magic = configuration.get('magic_number', 20)
+    msg = "{} messages sent. {} messages left."
+    left = list_size - index
+    count = magic if left > magic else left
+    left -= count
+    logging.info(msg.format(count, left))
+    if left > 0:
+        sleep = int(configuration.get('sleep', 0))
+        logging.info("Sleeping {} seconds".format(sleep))
+        time.sleep(sleep)
 
 
 def main(options):
@@ -122,8 +138,8 @@ def main(options):
     configuration['subject'] = options.subject if options.subject else ""
     configuration['body'] = "\n".join(options.message.readlines())
     magic = configuration.get('magic_number', 20)
-    for index in range(0, len(email_list), magic):
-        try:
+    try:
+        for index in range(0, len(email_list), magic):
             server = connect_to_server(configuration)
             addrs = [c for c in email_list[index:index + magic]]
             addrs = ["{} <{}>".format(c.email, c.name) for c in addrs]
@@ -132,23 +148,16 @@ def main(options):
             payload = message.format(**configuration)
             server.sendmail(configuration['sender'], addrs, payload)
             server.quit()
-        except Exception:
-            print(traceback.format_exc())
-            break
-        else:
-            left = len(email_list) - index
-            count = magic if left > magic else left
-            left -= count
-            print("{} messages sent. {} messages left.".format(count, left))
-            if left > 0:
-                sleep = int(configuration.get('sleep', 0))
-                print("Sleeping {} seconds".format(sleep))
-                time.sleep(sleep)
+            report_sent_mail(configuration, index, len(email_list))
+    except Exception:
+        logging.exception(traceback.format_exc())
 
 
 if __name__ == "__main__":
     options = process_arguments()
     if options:
+        log_format = "%(message)s"
+        logging.basicConfig(format=log_format, level=logging.INFO)
         if options.dump:
             dump()
         else:
